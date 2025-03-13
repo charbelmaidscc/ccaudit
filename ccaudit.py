@@ -5,11 +5,23 @@ import xlsxwriter  # Ensure xlsxwriter is explicitly imported
 from datetime import datetime
 
 def preprocess_cca(df):
-    df['Start Of Contract'] = df['Start Of Contract'].astype(str).str.rstrip()
+    df.columns = df.columns.str.strip()  # Remove spaces in column names
+    df['Start Of Contract'] = pd.to_datetime(df['Start Of Contract'], errors='coerce')
     return df
 
 def preprocess_hp(df):
+    df.columns = df.columns.str.strip()
     df['Contract Name'] = df['Contract Name'].astype(str).str[6:]
+    return df
+
+def preprocess_pt(df):
+    df.columns = df.columns.str.strip()
+    df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce')
+    df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce')
+    return df
+
+def preprocess_ec(df):
+    df.columns = df.columns.str.strip()
     return df
 
 def add_columns(cca, hp, ec, pt, month_start_date):
@@ -22,8 +34,8 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if row['Exceptional Case'] == 'Yes':
             ec_value = ec.loc[ec['Cont #'] == row['Contract'], 'Monthly Payment'].values
             return 'Yes' if (ec_value.size > 0 and (ec_value[0] in ['N/A', '-'] or row['Amount Of Payment'] >= ec_value[0])) else 'No'
-        pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT'].max()
-        return 'Yes' if row['Amount Of Payment'] >= pt_value else 'No'
+        pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT']
+        return 'Yes' if not pt_value.empty and row['Amount Of Payment'] >= pt_value.max() else 'No'
     
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
     
@@ -31,8 +43,8 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
         if row['Paying Correctly on Price of Now'] == 'No':
-            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & (pt['Start Date'] <= row['Start Of Contract']) & (pt['End Date'] >= row['Start Of Contract'])]['Minimum monthly payment + VAT'].max()
-            return 'Yes' if row['Amount Of Payment'] >= pt_value else 'No'
+            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & (pt['Start Date'] <= row['Start Of Contract']) & (pt['End Date'] >= row['Start Of Contract'])]['Minimum monthly payment + VAT']
+            return 'Yes' if not pt_value.empty and row['Amount Of Payment'] >= pt_value.max() else 'No'
         return ''
     
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
@@ -43,8 +55,8 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No':
             if pd.isna(row['Upgrading Nationality Payment Amount']):
                 return 'No'
-            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT'].max()
-            return 'Yes' if (row['Amount Of Payment'] + row['Upgrading Nationality Payment Amount']) >= pt_value else 'No'
+            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT']
+            return 'Yes' if not pt_value.empty and (row['Amount Of Payment'] + row['Upgrading Nationality Payment Amount']) >= pt_value.max() else 'No'
         return ''
     
     cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_upgrading_nationality, axis=1)
@@ -76,8 +88,8 @@ def main():
         if hp_file and cca_file and ec_file and pt_file:
             hp = preprocess_hp(pd.read_excel(io.BytesIO(hp_file.getvalue()), engine='openpyxl'))
             cca = preprocess_cca(pd.read_excel(io.BytesIO(cca_file.getvalue()), engine='openpyxl'))
-            ec = pd.read_excel(io.BytesIO(ec_file.getvalue()), engine='openpyxl')
-            pt = pd.read_excel(io.BytesIO(pt_file.getvalue()), engine='openpyxl')
+            ec = preprocess_ec(pd.read_excel(io.BytesIO(ec_file.getvalue()), engine='openpyxl'))
+            pt = preprocess_pt(pd.read_excel(io.BytesIO(pt_file.getvalue()), engine='openpyxl'))
             
             labeled_cca = add_columns(cca, hp, ec, pt, pd.to_datetime(month_start_date))
             
