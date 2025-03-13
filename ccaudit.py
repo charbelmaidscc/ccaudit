@@ -73,10 +73,10 @@ def main():
     
     if st.button("Generate"):
         if hp_file and cca_file and ec_file and pt_file:
-            hp = preprocess_hp(pd.read_excel(hp_file, engine='openpyxl'))
-            cca = preprocess_cca(pd.read_excel(cca_file, engine='openpyxl'))
-            ec = pd.read_excel(ec_file, engine='openpyxl')
-            pt = pd.read_excel(pt_file, engine='openpyxl')
+            hp = preprocess_hp(pd.read_excel(io.BytesIO(hp_file.getvalue()), engine='openpyxl'))
+            cca = preprocess_cca(pd.read_excel(io.BytesIO(cca_file.getvalue()), engine='openpyxl'))
+            ec = pd.read_excel(io.BytesIO(ec_file.getvalue()), engine='openpyxl')
+            pt = pd.read_excel(io.BytesIO(pt_file.getvalue()), engine='openpyxl')
             
             labeled_cca = add_columns(cca, hp, ec, pt, pd.to_datetime(month_start_date))
             
