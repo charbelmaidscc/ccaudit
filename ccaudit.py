@@ -11,7 +11,7 @@ def preprocess_cca(df):
 
 def preprocess_hp(df):
     df.columns = df.columns.str.strip()
-    df['Contract Name'] = df['Contract Name'].astype(str).str[6:]
+    df['Contract Name'] = df['Contract Name'].astype(str).str.replace("Contr-", "", regex=False)
     return df
 
 def preprocess_pt(df):
