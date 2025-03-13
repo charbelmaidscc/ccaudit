@@ -5,36 +5,32 @@ import xlsxwriter  # Ensure xlsxwriter is explicitly imported
 from datetime import datetime
 
 def preprocess_cca(df):
-    df.columns = df.columns.str.strip()  # Remove spaces in column names
     df['Start Of Contract'] = pd.to_datetime(df['Start Of Contract'], errors='coerce').dt.strftime('%m/%d/%Y')
-    df['Contract'] = df['Contract'].astype(str).str.strip()  # Ensure contract is string for matching
+    df['Contract'] = df['Contract'].astype(str)  # Ensure contract is string for matching
     return df
 
 def preprocess_hp(df):
-    df.columns = df.columns.str.strip()
-    df['Contract Name'] = df['Contract Name'].astype(str).str.replace("Contr-", "", regex=False).str.strip()
+    df['Contract Name'] = df['Contract Name'].astype(str).str.replace("Contr-", "", regex=False)
     return df
 
 def preprocess_pt(df):
-    df.columns = df.columns.str.strip()
     df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce').dt.strftime('%m/%d/%Y')
     df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce').dt.strftime('%m/%d/%Y')
     return df
 
 def preprocess_ec(df):
-    df.columns = df.columns.str.strip()
     return df
 
 def add_columns(cca, hp, ec, pt, month_start_date):
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     
     # Ensure contract names are clean and matching types
-    hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
-    cca['Contract'] = cca['Contract'].astype(str).str.strip()
+    hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str)
+    cca['Contract'] = cca['Contract'].astype(str)
     
     # Now match contract names correctly
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_filtered['Contract Name'].tolist() else 'No')
-    cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].astype(str).str.strip().tolist() else 'No')
+    cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].astype(str).tolist() else 'No')
     
     def check_paying_now(row):
         if row['To Check'] == 'No':
