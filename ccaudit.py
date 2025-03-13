@@ -30,10 +30,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     cca['Contract'] = cca['Contract'].astype(str).str.strip()
 
-    # Ensure valid To Check column
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_filtered['Contract Name'].tolist() else 'No')
-    
-    # If all rows have "No" in To Check, something is wrong
     if (cca['To Check'] == 'No').all():
         st.warning("Warning: No contracts matched in 'To Check' column. Verify contract formats.")
     
@@ -41,7 +38,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     
     def check_paying_now(row):
         if row['To Check'] == 'No':
-            return ''
+            return 'No'
         if row['Exceptional Case'] == 'Yes':
             ec_value = ec.loc[ec['Cont #'] == row['Contract'], 'Monthly Payment'].values
             if ec_value.size > 0:
@@ -56,25 +53,25 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if not pt_value.empty:
             latest_price = pd.to_numeric(pt_value.loc[pt_value['End Date'].idxmax(), 'Minimum monthly payment + VAT'], errors='coerce')
             return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
-        return ''
+        return 'No'
     
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
     
     def check_paying_contract_start(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
-            return ''
+            return 'No'
         if row['Paying Correctly on Price of Now'] == 'No':
             pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & ((pt['Start Date'] <= row['Start Of Contract']) & (pt['End Date'] >= row['Start Of Contract']))]
             if not pt_value.empty:
                 latest_price = pt_value['Minimum monthly payment + VAT'].max()
                 return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
-        return ''
+        return 'No'
     
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
     
     def check_paying_upgrading_nationality(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
-            return ''
+            return 'No'
         if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No':
             if pd.isna(row['Upgrading Nationality Payment Amount']) or row['Upgrading Nationality Payment Amount'] == '':
                 return 'No'
@@ -82,23 +79,24 @@ def add_columns(cca, hp, ec, pt, month_start_date):
             if not pt_value.empty:
                 latest_price = pt_value['Minimum monthly payment + VAT'].max()
                 return 'Yes' if (row['Amount Of Payment'] + row['Upgrading Nationality Payment Amount']) >= latest_price else 'No'
-        return ''
+        return 'No'
     
     cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_paying_upgrading_nationality, axis=1)
     
     def check_paying_pro_rated(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
-            return ''
+            return 'No'
         if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No' and row['Paying Correctly if Upgrading Nationality'] == 'No':
             if row['Start Of Contract'] < month_start_date:
                 return 'No'
             return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
-        return ''
+        return 'No'
     
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_paying_pro_rated, axis=1)
     
     return cca
 
+### **🔥 Main Streamlit App Functionality 🔥**
 def main():
     st.title("Client’s Contract Audit Processing")
     
