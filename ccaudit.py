@@ -23,37 +23,40 @@ def preprocess_ec(df):
     return df
 
 def add_columns(cca, hp, ec, pt, month_start_date):
+    if cca.empty or hp.empty or ec.empty or pt.empty:
+        return pd.DataFrame()  # Return an empty DataFrame if any input is empty
+
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
-    
-    # Ensure contract names are clean and matching types
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     cca['Contract'] = cca['Contract'].astype(str).str.strip()
-    
-    # Matching contracts properly (like VLOOKUP)
+
+    # Ensure valid To Check column
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_filtered['Contract Name'].tolist() else 'No')
+    
+    # If all rows have "No" in To Check, something is wrong
+    if (cca['To Check'] == 'No').all():
+        st.warning("Warning: No contracts matched in 'To Check' column. Verify contract formats.")
+    
     cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].tolist() else 'No')
     
-def check_paying_now(row):
-    if row['To Check'] == 'No':
+    def check_paying_now(row):
+        if row['To Check'] == 'No':
+            return ''
+        if row['Exceptional Case'] == 'Yes':
+            ec_value = ec.loc[ec['Cont #'] == row['Contract'], 'Monthly Payment'].values
+            if ec_value.size > 0:
+                try:
+                    ec_amount = pd.to_numeric(ec_value[0], errors='coerce')
+                    if pd.isna(ec_amount):
+                        return 'Yes'
+                    return 'Yes' if row['Amount Of Payment'] >= ec_amount else 'No'
+                except Exception:
+                    return 'No'
+        pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]
+        if not pt_value.empty:
+            latest_price = pd.to_numeric(pt_value.loc[pt_value['End Date'].idxmax(), 'Minimum monthly payment + VAT'], errors='coerce')
+            return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
         return ''
-    if row['Exceptional Case'] == 'Yes':
-        ec_value = ec.loc[ec['Cont #'] == row['Contract'], 'Monthly Payment'].values
-        if ec_value.size > 0:
-            try:
-                # Convert to float after cleaning N/A or other text values
-                ec_amount = pd.to_numeric(ec_value[0], errors='coerce')
-                if pd.isna(ec_amount):  # Handle cases where conversion fails
-                    return 'Yes'
-                return 'Yes' if row['Amount Of Payment'] >= ec_amount else 'No'
-            except Exception as e:
-                return 'No'  # Default to No if conversion fails
-
-    pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]
-    if not pt_value.empty:
-        latest_price = pd.to_numeric(pt_value.loc[pt_value['End Date'].idxmax(), 'Minimum monthly payment + VAT'], errors='coerce')
-        return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
-    
-    return ''
     
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
     
@@ -89,6 +92,11 @@ def main():
             pt = preprocess_pt(pd.read_excel(io.BytesIO(pt_file.getvalue()), engine='openpyxl'))
             
             labeled_cca = add_columns(cca, hp, ec, pt, month_start_date)
+            
+            # Debugging check
+            if labeled_cca is None or labeled_cca.empty:
+                st.error("Error: Processed DataFrame is empty. Please check the input data.")
+                return
             
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
