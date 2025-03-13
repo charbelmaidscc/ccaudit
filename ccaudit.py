@@ -72,6 +72,31 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
     
+    def check_paying_upgrading_nationality(row):
+        if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
+            return ''
+        if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No':
+            if pd.isna(row['Upgrading Nationality Payment Amount']) or row['Upgrading Nationality Payment Amount'] == '':
+                return 'No'
+            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & (pt['End Date'] == pt['End Date'].max())]
+            if not pt_value.empty:
+                latest_price = pt_value['Minimum monthly payment + VAT'].max()
+                return 'Yes' if (row['Amount Of Payment'] + row['Upgrading Nationality Payment Amount']) >= latest_price else 'No'
+        return ''
+    
+    cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_paying_upgrading_nationality, axis=1)
+    
+    def check_paying_pro_rated(row):
+        if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
+            return ''
+        if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No' and row['Paying Correctly if Upgrading Nationality'] == 'No':
+            if row['Start Of Contract'] < month_start_date:
+                return 'No'
+            return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
+        return ''
+    
+    cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_paying_pro_rated, axis=1)
+    
     return cca
 
 def main():
@@ -93,7 +118,6 @@ def main():
             
             labeled_cca = add_columns(cca, hp, ec, pt, month_start_date)
             
-            # Debugging check
             if labeled_cca is None or labeled_cca.empty:
                 st.error("Error: Processed DataFrame is empty. Please check the input data.")
                 return
@@ -104,7 +128,7 @@ def main():
             output.seek(0)
             
             st.download_button("Download Labeled Client’s Contract Audit", data=output, file_name="Labeled_CCA.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        else:
+           else:
             st.error("Please upload all required files before generating the output.")
 
 if __name__ == "__main__":
