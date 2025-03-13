@@ -6,7 +6,7 @@ from datetime import datetime
 
 def preprocess_cca(df):
     df.columns = df.columns.str.strip()  # Remove spaces in column names
-    df['Start Of Contract'] = pd.to_datetime(df['Start Of Contract'], errors='coerce')
+    df['Start Of Contract'] = pd.to_datetime(df['Start Of Contract'], errors='coerce').dt.strftime('%m/%d/%Y')
     return df
 
 def preprocess_hp(df):
@@ -16,8 +16,8 @@ def preprocess_hp(df):
 
 def preprocess_pt(df):
     df.columns = df.columns.str.strip()
-    df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce')
-    df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce')
+    df['Start Date'] = pd.to_datetime(df['Start Date'], errors='coerce').dt.strftime('%m/%d/%Y')
+    df['End Date'] = pd.to_datetime(df['End Date'], errors='coerce').dt.strftime('%m/%d/%Y')
     return df
 
 def preprocess_ec(df):
@@ -25,7 +25,8 @@ def preprocess_ec(df):
     return df
 
 def add_columns(cca, hp, ec, pt, month_start_date):
-    cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')]['Contract Name'].tolist() else 'No')
+    hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')]
+    cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_filtered['Contract Name'].tolist() else 'No')
     cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].tolist() else 'No')
     
     def check_paying_now(row):
@@ -34,8 +35,11 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if row['Exceptional Case'] == 'Yes':
             ec_value = ec.loc[ec['Cont #'] == row['Contract'], 'Monthly Payment'].values
             return 'Yes' if (ec_value.size > 0 and (ec_value[0] in ['N/A', '-'] or row['Amount Of Payment'] >= ec_value[0])) else 'No'
-        pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT']
-        return 'Yes' if not pt_value.empty and row['Amount Of Payment'] >= pt_value.max() else 'No'
+        pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]
+        if not pt_value.empty:
+            latest_price = pt_value.loc[pt_value['End Date'].max(), 'Minimum monthly payment + VAT']
+            return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
+        return ''
     
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
     
@@ -43,41 +47,20 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
         if row['Paying Correctly on Price of Now'] == 'No':
-            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & (pt['Start Date'] <= row['Start Of Contract']) & (pt['End Date'] >= row['Start Of Contract'])]['Minimum monthly payment + VAT']
-            return 'Yes' if not pt_value.empty and row['Amount Of Payment'] >= pt_value.max() else 'No'
+            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type']) & ((pt['Start Date'] <= row['Start Of Contract']) & (pt['End Date'] >= row['Start Of Contract']))]
+            if not pt_value.empty:
+                latest_price = pt_value['Minimum monthly payment + VAT'].max()
+                return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
         return ''
     
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
-    
-    def check_upgrading_nationality(row):
-        if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
-            return ''
-        if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No':
-            if pd.isna(row['Upgrading Nationality Payment Amount']):
-                return 'No'
-            pt_value = pt[(pt['Nationality'] == row['Maid Nationality']) & (pt['Contract Type'] == row['Contract Type'])]['Minimum monthly payment + VAT']
-            return 'Yes' if not pt_value.empty and (row['Amount Of Payment'] + row['Upgrading Nationality Payment Amount']) >= pt_value.max() else 'No'
-        return ''
-    
-    cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_upgrading_nationality, axis=1)
-    
-    def check_pro_rated(row):
-        if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
-            return ''
-        if row['Paying Correctly on Price of Now'] == 'No' and row['Paying Correctly on Price of Contract Start Date'] == 'No' and row['Paying Correctly if Upgrading Nationality'] == 'No':
-            if row['Start Of Contract'] < month_start_date:
-                return 'No'
-            return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
-        return ''
-    
-    cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
     
     return cca
 
 def main():
     st.title("Client’s Contract Audit Processing")
     
-    month_start_date = st.date_input("Month Start Date", value=datetime.today())
+    month_start_date = st.date_input("Month Start Date", value=datetime.today()).strftime('%m/%d/%Y')
     
     hp_file = st.file_uploader("Upload Housemaid Payroll", type=["xls", "xlsx"], key="hp")
     cca_file = st.file_uploader("Upload Client’s Contract Audit", type=["xls", "xlsx"], key="cca")
@@ -91,7 +74,7 @@ def main():
             ec = preprocess_ec(pd.read_excel(io.BytesIO(ec_file.getvalue()), engine='openpyxl'))
             pt = preprocess_pt(pd.read_excel(io.BytesIO(pt_file.getvalue()), engine='openpyxl'))
             
-            labeled_cca = add_columns(cca, hp, ec, pt, pd.to_datetime(month_start_date))
+            labeled_cca = add_columns(cca, hp, ec, pt, month_start_date)
             
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
