@@ -6,11 +6,11 @@ from datetime import datetime
 
 def preprocess_cca(df):
     df['Start Of Contract'] = pd.to_datetime(df['Start Of Contract'], errors='coerce').dt.strftime('%m/%d/%Y')
-    df['Contract'] = df['Contract'].astype(str)  # Ensure contract is string for matching
+    df['Contract'] = df['Contract'].astype(str).str.split('.').str[0]  # Ensure contract is clean without decimals
     return df
 
 def preprocess_hp(df):
-    df['Contract Name'] = df['Contract Name'].astype(str).str.replace("Contr-", "", regex=False)
+    df['Contract Name'] = df['Contract Name'].astype(str).str.replace("Contr-", "", regex=False).str.strip()
     return df
 
 def preprocess_pt(df):
@@ -19,18 +19,19 @@ def preprocess_pt(df):
     return df
 
 def preprocess_ec(df):
+    df['Cont #'] = df['Cont #'].astype(str).str.split('.').str[0]  # Ensure consistency in contract numbers
     return df
 
 def add_columns(cca, hp, ec, pt, month_start_date):
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     
     # Ensure contract names are clean and matching types
-    hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str)
-    cca['Contract'] = cca['Contract'].astype(str)
+    hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
+    cca['Contract'] = cca['Contract'].astype(str).str.strip()
     
-    # Now match contract names correctly
+    # Matching contracts properly (like VLOOKUP)
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_filtered['Contract Name'].tolist() else 'No')
-    cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].astype(str).tolist() else 'No')
+    cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec['Cont #'].tolist() else 'No')
     
     def check_paying_now(row):
         if row['To Check'] == 'No':
