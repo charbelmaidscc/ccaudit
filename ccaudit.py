@@ -128,8 +128,9 @@ def main():
             output.seek(0)
             
             st.download_button("Download Labeled Client’s Contract Audit", data=output, file_name="Labeled_CCA.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-           else:
+        else:
             st.error("Please upload all required files before generating the output.")
 
 if __name__ == "__main__":
     main()
+
