@@ -26,32 +26,28 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     if cca.empty or hp.empty or ec.empty or pt.empty:
         return pd.DataFrame()
 
-    # Map 'Maid Nationality' to match PT logic
+    # Map 'Maid Nationality' to PT logic
     def map_nationality(nat):
         if pd.isna(nat):
             return 'Other'
         nat_str = str(nat).strip()
         if nat_str in ['Filipina', 'Ethiopian']:
             return nat_str
-        else:
-            return 'Other'
+        return 'Other'
 
     cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
 
-    # Prepare Housemaid Payroll (HP) filtered list
+    # Filter HP contracts
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     hp_contract_list = hp_filtered['Contract Name'].tolist()
 
-    # To Check column
     cca['Contract'] = cca['Contract'].astype(str).str.strip()
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_contract_list else 'No')
 
-    # Exceptional Case column
     ec_list = ec['Cont #'].tolist()
     cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec_list else 'No')
 
-    # Get latest PT price
     pt_latest = pt.loc[pt.groupby(['Nationality', 'Contract Type'])['End Date'].idxmax()]
     pt_latest = pt_latest[['Nationality', 'Contract Type', 'Minimum monthly payment + VAT']]
 
@@ -62,15 +58,14 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         return None
 
     def get_price_at_contract_start(mapped_nat, contract_type, contract_date):
-        match = pt[(pt['Nationality'] == mapped_nat) & 
-                   (pt['Contract Type'] == contract_type) & 
-                   (pt['Start Date'] <= contract_date) & 
+        match = pt[(pt['Nationality'] == mapped_nat) &
+                   (pt['Contract Type'] == contract_type) &
+                   (pt['Start Date'] <= contract_date) &
                    (pt['End Date'] >= contract_date)]
         if not match.empty:
             return pd.to_numeric(match.iloc[0]['Minimum monthly payment + VAT'], errors='coerce')
         return None
 
-    # Paying Correctly on Price of Now
     def check_paying_now(row):
         if row['To Check'] == 'No':
             return ''
@@ -94,7 +89,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
 
-    # Paying Correctly on Price of Contract Start Date
     def check_paying_contract_start(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
@@ -105,7 +99,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
 
-    # Paying Correctly if Upgrading Nationality
     def check_upgrading(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
@@ -119,19 +112,22 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_upgrading, axis=1)
 
-    # Paying Correctly if Pro-Rated Value
     def check_pro_rated(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
+        if pd.isna(row['Start Of Contract']):
+            return 'No'
         if row['Start Of Contract'] < month_start_date:
             return 'No'
         return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
-    # Convert back date format
-    cca['Start Of Contract'] = cca['Start Of Contract'].dt.strftime('%m/%d/%Y')
-    return cca
+    # Prepare for export – convert date to mm/dd/yyyy format
+    cca_export = cca.copy()
+    cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
+
+    return cca_export
 
 def main():
     st.title("Client’s Contract Audit Processing")
