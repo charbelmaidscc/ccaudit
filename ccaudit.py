@@ -28,24 +28,30 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     # Map 'Maid Nationality' to match PT logic
     def map_nationality(nat):
-        if nat.strip() in ['Filipina', 'Ethiopian']:
-            return nat.strip()
+        if pd.isna(nat):
+            return 'Other'
+        nat_str = str(nat).strip()
+        if nat_str in ['Filipina', 'Ethiopian']:
+            return nat_str
         else:
             return 'Other'
 
     cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
 
+    # Prepare Housemaid Payroll (HP) filtered list
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
-    contract_list_hp = hp_filtered['Contract Name'].tolist()
+    hp_contract_list = hp_filtered['Contract Name'].tolist()
 
+    # To Check column
     cca['Contract'] = cca['Contract'].astype(str).str.strip()
-    cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in contract_list_hp else 'No')
+    cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_contract_list else 'No')
 
+    # Exceptional Case column
     ec_list = ec['Cont #'].tolist()
     cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec_list else 'No')
 
-    # Latest PT price per Nationality + Contract Type
+    # Get latest PT price
     pt_latest = pt.loc[pt.groupby(['Nationality', 'Contract Type'])['End Date'].idxmax()]
     pt_latest = pt_latest[['Nationality', 'Contract Type', 'Minimum monthly payment + VAT']]
 
@@ -64,7 +70,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
             return pd.to_numeric(match.iloc[0]['Minimum monthly payment + VAT'], errors='coerce')
         return None
 
-    # Third Column Logic
+    # Paying Correctly on Price of Now
     def check_paying_now(row):
         if row['To Check'] == 'No':
             return ''
@@ -88,7 +94,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
 
-    # Fourth Column Logic
+    # Paying Correctly on Price of Contract Start Date
     def check_paying_contract_start(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
@@ -99,7 +105,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
 
-    # Fifth Column Logic
+    # Paying Correctly if Upgrading Nationality
     def check_upgrading(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
@@ -113,7 +119,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly if Upgrading Nationality'] = cca.apply(check_upgrading, axis=1)
 
-    # Sixth Column Logic
+    # Paying Correctly if Pro-Rated Value
     def check_pro_rated(row):
         if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
             return ''
@@ -123,7 +129,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
-    # Format date columns
+    # Convert back date format
     cca['Start Of Contract'] = cca['Start Of Contract'].dt.strftime('%m/%d/%Y')
     return cca
 
@@ -131,7 +137,7 @@ def main():
     st.title("Client’s Contract Audit Processing")
 
     month_start_date = st.date_input("Month Start Date", value=datetime.today())
-    
+
     hp_file = st.file_uploader("Upload Housemaid Payroll", type=["xls", "xlsx"], key="hp")
     cca_file = st.file_uploader("Upload Client’s Contract Audit", type=["xls", "xlsx"], key="cca")
     ec_file = st.file_uploader("Upload Exceptional Cases", type=["xls", "xlsx"], key="ec")
