@@ -26,7 +26,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     if cca.empty or hp.empty or ec.empty or pt.empty:
         return pd.DataFrame()
 
-    # Map 'Maid Nationality' to PT logic
     def map_nationality(nat):
         if pd.isna(nat):
             return 'Other'
@@ -65,8 +64,11 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     def get_price_at_contract_start(mapped_nat, contract_type, contract_date):
         match = pt[(pt['Nationality'] == mapped_nat) &
                    (pt['Contract Type'] == contract_type) &
-                   (pt['Start Date'] <= contract_date) &
-                   (pt['End Date'] >= contract_date)]
+                   (
+                       (pt['Start Date'] <= contract_date) & (pt['End Date'] >= contract_date)
+                       | (pt['Start Date'] == contract_date)
+                       | (pt['End Date'] == contract_date)
+                   )]
         if not match.empty:
             return pd.to_numeric(match.iloc[0]['Minimum monthly payment + VAT'], errors='coerce')
         return None
@@ -128,7 +130,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
-    # Prepare for export – convert date to mm/dd/yyyy
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
 
