@@ -26,16 +26,16 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     if cca.empty or hp.empty or ec.empty or pt.empty:
         return pd.DataFrame()
 
+    # Map Maid Nationality
     def map_nationality(nat):
         if pd.isna(nat):
             return 'Other'
         nat_str = str(nat).strip()
-        if nat_str in ['Filipina', 'Ethiopian']:
-            return nat_str
-        return 'Other'
+        return nat_str if nat_str in ['Filipina', 'Ethiopian'] else 'Other'
 
     cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
 
+    # Preprocess HP contracts
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     hp_contract_list = hp_filtered['Contract Name'].tolist()
@@ -64,11 +64,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     def get_price_at_contract_start(mapped_nat, contract_type, contract_date):
         match = pt[(pt['Nationality'] == mapped_nat) &
                    (pt['Contract Type'] == contract_type) &
-                   (
-                       (pt['Start Date'] <= contract_date) & (pt['End Date'] >= contract_date)
-                       | (pt['Start Date'] == contract_date)
-                       | (pt['End Date'] == contract_date)
-                   )]
+                   (pt['Start Date'] <= contract_date) & (pt['End Date'] >= contract_date)]
         if not match.empty:
             return pd.to_numeric(match.iloc[0]['Minimum monthly payment + VAT'], errors='coerce')
         return None
@@ -126,10 +122,15 @@ def add_columns(cca, hp, ec, pt, month_start_date):
             return 'No'
         if row['Start Of Contract'] < month_start_date:
             return 'No'
-        return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
+        prorated_value = row['Pro-Rated']
+        # Custom rounding: if decimal < 0.5, floor it
+        if prorated_value % 1 < 0.5:
+            prorated_value = int(prorated_value)
+        return 'Yes' if row['Amount Of Payment'] >= prorated_value else 'No'
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
+    # Prepare export
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
 
