@@ -45,7 +45,13 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     cca['To Check'] = cca['Contract'].apply(lambda x: 'Yes' if x in hp_contract_list else 'No')
 
     ec_list = ec['Cont #'].tolist()
-    cca['Exceptional Case'] = cca['Contract'].apply(lambda x: 'Yes' if x in ec_list else 'No')
+
+    def determine_exceptional_case(row):
+        if row['To Check'] == 'No':
+            return ''
+        return 'Yes' if row['Contract'] in ec_list else 'No'
+
+    cca['Exceptional Case'] = cca.apply(determine_exceptional_case, axis=1)
 
     pt_latest = pt.loc[pt.groupby(['Nationality', 'Contract Type'])['End Date'].idxmax()]
     pt_latest = pt_latest[['Nationality', 'Contract Type', 'Minimum monthly payment + VAT']]
