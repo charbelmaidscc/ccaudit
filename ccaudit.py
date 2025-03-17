@@ -26,7 +26,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     if cca.empty or hp.empty or ec.empty or pt.empty:
         return pd.DataFrame()
 
-    # Map Maid Nationality
     def map_nationality(nat):
         if pd.isna(nat):
             return 'Other'
@@ -35,7 +34,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
 
-    # Preprocess HP contracts
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     hp_contract_list = hp_filtered['Contract Name'].tolist()
@@ -122,15 +120,10 @@ def add_columns(cca, hp, ec, pt, month_start_date):
             return 'No'
         if row['Start Of Contract'] < month_start_date:
             return 'No'
-        prorated_value = row['Pro-Rated']
-        # Custom rounding: if decimal < 0.5, floor it
-        if prorated_value % 1 < 0.5:
-            prorated_value = int(prorated_value)
-        return 'Yes' if row['Amount Of Payment'] >= prorated_value else 'No'
+        return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
-    # Prepare export
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
 
