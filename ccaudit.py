@@ -37,7 +37,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
 
-    # Filter HP contracts
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
     hp_contract_list = hp_filtered['Contract Name'].tolist()
@@ -123,7 +122,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
 
-    # Prepare for export – convert date to mm/dd/yyyy format
+    # Prepare for export – convert date to mm/dd/yyyy
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
 
@@ -132,7 +131,8 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 def main():
     st.title("Client’s Contract Audit Processing")
 
-    month_start_date = st.date_input("Month Start Date", value=datetime.today())
+    month_start_date_input = st.date_input("Month Start Date", value=datetime.today())
+    month_start_date = datetime.combine(month_start_date_input, datetime.min.time())
 
     hp_file = st.file_uploader("Upload Housemaid Payroll", type=["xls", "xlsx"], key="hp")
     cca_file = st.file_uploader("Upload Client’s Contract Audit", type=["xls", "xlsx"], key="cca")
