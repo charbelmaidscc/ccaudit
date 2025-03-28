@@ -32,6 +32,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         nat_str = str(nat).strip()
         return nat_str if nat_str in ['Filipina', 'Ethiopian'] else 'Other'
 
+    # Column name fix
     cca['Mapped Nationality'] = cca['Maid Nationality During Payroll Month'].apply(map_nationality)
 
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
@@ -56,15 +57,20 @@ def add_columns(cca, hp, ec, pt, month_start_date):
     def get_latest_price(mapped_nat, contract_type):
         match = pt_latest[(pt_latest['Nationality'] == mapped_nat) & (pt_latest['Contract Type'] == contract_type)]
         if not match.empty:
-            return float(match['Minimum monthly payment + VAT'].values[0])
+            return pd.to_numeric(match['Minimum monthly payment + VAT'].values[0], errors='coerce')
         return None
 
     def get_price_at_contract_start(mapped_nat, contract_type, contract_date):
-        match = pt[(pt['Nationality'] == mapped_nat) &
-                   (pt['Contract Type'] == contract_type) &
-                   (pt['Start Date'] <= contract_date) & (pt['End Date'] >= contract_date)]
+        if pd.isna(contract_date):
+            return None
+        match = pt[
+            (pt['Nationality'] == mapped_nat) &
+            (pt['Contract Type'] == contract_type) &
+            (pt['Start Date'].dt.date <= contract_date.date()) &
+            (pt['End Date'].dt.date >= contract_date.date())
+        ]
         if not match.empty:
-            return float(match.iloc[0]['Minimum monthly payment + VAT'])
+            return pd.to_numeric(match.iloc[0]['Minimum monthly payment + VAT'], errors='coerce')
         return None
 
     def check_paying_now(row):
@@ -78,14 +84,14 @@ def add_columns(cca, hp, ec, pt, month_start_date):
                     return 'Yes'
                 try:
                     val_num = float(val)
-                    return 'Yes' if float(row['Amount Of Payment']) >= val_num else 'No'
+                    return 'Yes' if row['Amount Of Payment'] >= val_num else 'No'
                 except:
                     return 'No'
             return 'No'
         else:
             latest_price = get_latest_price(row['Mapped Nationality'], row['Contract Type'])
             if latest_price is not None:
-                return 'Yes' if float(row['Amount Of Payment']) >= latest_price else 'No'
+                return 'Yes' if row['Amount Of Payment'] >= latest_price else 'No'
             return 'No'
 
     cca['Paying Correctly on Price of Now'] = cca.apply(check_paying_now, axis=1)
@@ -95,7 +101,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
             return ''
         contract_price = get_price_at_contract_start(row['Mapped Nationality'], row['Contract Type'], row['Start Of Contract'])
         if contract_price is not None:
-            return 'Yes' if float(row['Amount Of Payment']) >= contract_price else 'No'
+            return 'Yes' if row['Amount Of Payment'] >= contract_price else 'No'
         return 'No'
 
     cca['Paying Correctly on Price of Contract Start Date'] = cca.apply(check_paying_contract_start, axis=1)
