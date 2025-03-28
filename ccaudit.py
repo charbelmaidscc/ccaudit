@@ -32,7 +32,8 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         nat_str = str(nat).strip()
         return nat_str if nat_str in ['Filipina', 'Ethiopian'] else 'Other'
 
-    cca['Mapped Nationality'] = cca['Maid Nationality'].apply(map_nationality)
+    # FIX: Refer to updated column name
+    cca['Mapped Nationality'] = cca['Maid Nationality During Payroll Month'].apply(map_nationality)
 
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
     hp_filtered['Contract Name'] = hp_filtered['Contract Name'].astype(str).str.strip()
