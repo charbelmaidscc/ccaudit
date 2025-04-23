@@ -149,6 +149,7 @@ def add_columns(cca, hp, ec, pt, month_start_date):
 
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
+    cca_export['Paying Correctly on Old Price'] = cca['Paying Correctly on Old Price']
 
     return cca_export
 
