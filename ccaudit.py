@@ -32,7 +32,6 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         nat_str = str(nat).strip()
         return nat_str if nat_str in ['Filipina', 'Ethiopian'] else 'Other'
 
-    # Column name fix
     cca['Mapped Nationality'] = cca['Maid Nationality During Payroll Month'].apply(map_nationality)
 
     hp_filtered = hp[(hp['Status'] == 'WITH_CLIENT') & (hp['Type Of maid'] == 'CC')].copy()
@@ -129,6 +128,24 @@ def add_columns(cca, hp, ec, pt, month_start_date):
         return 'Yes' if row['Amount Of Payment'] >= row['Pro-Rated'] else 'No'
 
     cca['Paying Correctly if Pro-Rated Value'] = cca.apply(check_pro_rated, axis=1)
+
+    def check_old_price(row):
+        if row['To Check'] == 'No' or row['Exceptional Case'] == 'Yes':
+            return ''
+        filtered_pt = pt[
+            (pt['Nationality'] == row['Mapped Nationality']) &
+            (pt['Contract Type'] == row['Contract Type'])
+        ]
+        for price in filtered_pt['Minimum monthly payment + VAT']:
+            try:
+                price = float(price)
+                if abs(row['Amount Of Payment'] - price) <= 5:
+                    return 'Yes'
+            except:
+                continue
+        return 'No'
+
+    cca['Paying Correctly on Old Price'] = cca.apply(check_old_price, axis=1)
 
     cca_export = cca.copy()
     cca_export['Start Of Contract'] = cca_export['Start Of Contract'].dt.strftime('%m/%d/%Y')
